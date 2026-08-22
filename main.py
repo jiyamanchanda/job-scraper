@@ -25,12 +25,35 @@ for job in jobs:
     link_element = job.find("a")
     job_url = link_element["href"] if link_element else None
 
+    department_container = job.find_parent(
+    "div",
+    class_="job-posts--table--department"
+)
+    department = (
+    department_container.find("h3").text.strip()
+    if department_container
+    else None
+)
     job_data = {
-        "title": title,
-        "location": location,
-        "job_url": job_url
-    }
-
+    "title": title,
+    "company": "Discord",
+    "location": location,
+    "department": department,
+    "job_url": job_url
+}
     jobs_data.append(job_data)
-
 print(jobs_data)
+
+        
+
+
+first_job = jobs[0]
+
+department_container = first_job.find_parent(
+    "div",
+    class_="job-posts--table--department"
+)
+
+department = department_container.find("h3").text.strip()
+
+print(department)
