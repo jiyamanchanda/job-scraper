@@ -17,7 +17,7 @@ def get_page(url):
         return None
 
 
-def parse_jobs(html):
+def parse_jobs(html, company):
     soup = BeautifulSoup(html, "html.parser")
 
     jobs = soup.find_all("tr", class_="job-post")
@@ -30,15 +30,40 @@ def parse_jobs(html):
 
         # Job title
         title_element = job.find("p", class_="body--medium")
-        title = title_element.text.strip() if title_element else None
+
+        # Remove "New" badge
+        new_badge = (
+            title_element.find("span", class_="tag-container")
+            if title_element
+            else None
+        )
+
+        if new_badge:
+            new_badge.decompose()
+
+        title = (
+            title_element.get_text(" ", strip=True)
+            if title_element
+            else None
+        )
 
         # Location
         location_element = job.find("p", class_="body__secondary")
-        location = location_element.text.strip() if location_element else None
+
+        location = (
+            location_element.get_text(" ", strip=True)
+            if location_element
+            else None
+        )
 
         # Job URL
         link_element = job.find("a")
-        job_url = link_element["href"] if link_element else None
+
+        job_url = (
+            link_element["href"]
+            if link_element
+            else None
+        )
 
         # Department
         department_container = job.find_parent(
@@ -47,14 +72,15 @@ def parse_jobs(html):
         )
 
         department = (
-            department_container.find("h3").text.strip()
+            department_container.find("h3").get_text(" ", strip=True)
             if department_container
             else None
         )
 
+        # Store job information
         job_data = {
             "title": title,
-            "company": "Discord",
+            "company": company,
             "location": location,
             "department": department,
             "job_url": job_url
@@ -70,7 +96,7 @@ url = "https://boards.greenhouse.io/discord"
 html = get_page(url)
 
 if html:
-    jobs_data = parse_jobs(html)
+    jobs_data = parse_jobs(html, "Discord")
 
     print("\nJobs data:")
     print(jobs_data)
