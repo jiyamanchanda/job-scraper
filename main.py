@@ -138,15 +138,31 @@ def get_role(title):
     else:
         return "Other"
 
+def get_active_job_urls(conn):
+    cursor = conn.cursor()
 
-def save_jobs(conn, jobs):
+    cursor.execute("""
+        SELECT job_url
+        FROM jobs
+        WHERE active = 1
+    """)
+
+    return {row[0] for row in cursor.fetchall()}
+
+def save_jobs(conn, jobs, previous_active_urls):
 
     cursor = conn.cursor()
 
     now = datetime.now().isoformat()
 
-    # Mark existing jobs as inactive.
-    # This is only called after the scrape has passed validation.
+    current_job_urls = {
+        job["job_url"]
+        for job in jobs
+        if job["job_url"]
+    }
+
+    removed_urls = previous_active_urls - current_job_urls
+
     cursor.execute("""
         UPDATE jobs
         SET active = 0
@@ -209,6 +225,7 @@ def save_jobs(conn, jobs):
 
     conn.commit()
 
+    return removed_urls
 
 def find_new_jobs(conn):
 
@@ -238,22 +255,26 @@ def find_new_jobs(conn):
     return new_jobs
 
 
-def find_removed_jobs(conn):
+def find_removed_jobs(conn, removed_urls):
+
+    if not removed_urls:
+        return
 
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT title, company, location, department, job_url
-        FROM jobs
-        WHERE active = 0
-    """)
+    print("\nRemoved jobs:")
 
-    removed_jobs = cursor.fetchall()
+    for job_url in removed_urls:
 
-    if removed_jobs:
-        print("\nRemoved jobs:")
+        cursor.execute("""
+            SELECT title, company, location, department
+            FROM jobs
+            WHERE job_url = ?
+        """, (job_url,))
 
-        for job in removed_jobs:
+        job = cursor.fetchone()
+
+        if job:
             print(
                 job[0],
                 "|",
@@ -261,9 +282,6 @@ def find_removed_jobs(conn):
                 "|",
                 job[2]
             )
-
-    return removed_jobs
-
 
 def show_role_counts(conn):
 
@@ -358,19 +376,20 @@ def main():
 
     create_database(conn)
 
-    # -------------------------
-    # 5. Save jobs
-    # -------------------------
+    
+    
 
-    save_jobs(conn, jobs)
+    previous_active_urls = get_active_job_urls(conn)
 
-    # -------------------------
-    # 6. Detect changes
-    # -------------------------
+    removed_urls = save_jobs(
+    conn,
+    jobs,
+    previous_active_urls
+)
 
     find_new_jobs(conn)
 
-    find_removed_jobs(conn)
+    find_removed_jobs(conn, removed_urls)
 
     # -------------------------
     # 7. Analytics
