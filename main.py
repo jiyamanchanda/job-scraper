@@ -399,6 +399,7 @@ def main():
 
     show_department_counts(conn)
 
+
     conn.close()
 
 
