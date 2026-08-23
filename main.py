@@ -98,6 +98,12 @@ def get_role(title):
     if "software engineer" in title_lower:
         return "Software Engineering"
 
+    elif "full-stack software engineer" in title_lower:
+        return "Software Engineering"
+
+    elif "devops" in title_lower or "qa/" in title_lower:
+        return "Software Engineering"
+
     elif "data scientist" in title_lower:
         return "Data Science"
 
@@ -119,8 +125,26 @@ def get_role(title):
     elif "counsel" in title_lower or "legal" in title_lower:
         return "Legal"
 
+    elif "account manager" in title_lower:
+        return "Sales"
+
     elif "sales" in title_lower:
         return "Sales"
+
+    elif "oracle" in title_lower or "erp" in title_lower:
+        return "Business Systems"
+
+    elif "policy" in title_lower:
+        return "Policy"
+
+    elif "threat investigator" in title_lower:
+        return "Trust & Safety"
+
+    elif "engineering manager" in title_lower:
+        return "Engineering Management"
+
+    elif "director of engineering" in title_lower:
+        return "Engineering Management"
 
     elif "manager" in title_lower:
         return "Management"
@@ -128,6 +152,39 @@ def get_role(title):
     else:
         return "Other"
 
+def find_new_jobs(jobs_data):
+
+    connection = sqlite3.connect("jobs.db")
+    cursor = connection.cursor()
+
+    # Get all job URLs already in the database
+    cursor.execute("""
+        SELECT job_url
+        FROM jobs
+    """)
+
+    existing_urls = set(row[0] for row in cursor.fetchall())
+
+    connection.close()
+
+    # Find jobs whose URL was not already in the database
+    new_jobs = []
+
+    for job in jobs_data:
+        if job["job_url"] not in existing_urls:
+            new_jobs.append(job)
+
+    if new_jobs:
+        print("\nNew jobs found:")
+
+        for job in new_jobs:
+            print(
+                job["title"],
+                "|",
+                job["department"],
+                "|",
+                job["location"]
+            )
 
 def save_jobs(jobs_data):
 
@@ -346,9 +403,59 @@ def show_role_counts():
 
     connection.close()
 
+def show_other_jobs():
+
+    connection = sqlite3.connect("jobs.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT title, department
+        FROM jobs
+        WHERE active = 1
+        AND role = 'Other'
+    """)
+
+    rows = cursor.fetchall()
+
+    if rows:
+        print("\nJobs classified as Other:")
+
+        for row in rows:
+            print(row)
+
+    connection.close()
+
+def show_new_jobs():
+
+    connection = sqlite3.connect("jobs.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT title, company, location, role
+        FROM jobs
+        WHERE first_seen = last_seen
+        AND active = 1
+    """)
+
+    rows = cursor.fetchall()
+
+    if rows:
+        print("\nNew jobs:")
+
+        for row in rows:
+            print(row)
+
+    connection.close()
+
+
+
 if html:
 
     jobs_data = parse_jobs(html, "Discord")
+
+    
+
+    find_new_jobs(jobs_data)
 
     save_jobs(jobs_data)
 
@@ -361,3 +468,7 @@ if html:
     show_title_counts()
 
     show_role_counts()
+
+    show_other_jobs()
+
+    show_new_jobs()
