@@ -94,9 +94,9 @@ def parse_jobs(html, company):
 def save_jobs(jobs_data):
 
     connection = sqlite3.connect("jobs.db")
-
     cursor = connection.cursor()
 
+    # Create table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,27 +104,47 @@ def save_jobs(jobs_data):
             company TEXT,
             location TEXT,
             department TEXT,
-            job_url TEXT UNIQUE
+            job_url TEXT UNIQUE,
+            active INTEGER
         )
     """)
 
+    # Step 1:
+    # Assume every existing job is no longer active
+    cursor.execute("""
+        UPDATE jobs
+        SET active = 0
+    """)
+    
+
+    # Step 2:
+    # Jobs found in the current scrape are active
     for job in jobs_data:
 
         cursor.execute("""
-            INSERT OR IGNORE INTO jobs (
+            INSERT INTO jobs (
                 title,
                 company,
                 location,
                 department,
-                job_url
+                job_url,
+                active
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_url)
+            DO UPDATE SET
+                title = excluded.title,
+                company = excluded.company,
+                location = excluded.location,
+                department = excluded.department,
+                active = 1
         """, (
             job["title"],
             job["company"],
             job["location"],
             job["department"],
-            job["job_url"]
+            job["job_url"],
+            1
         ))
 
     connection.commit()
@@ -132,34 +152,42 @@ def save_jobs(jobs_data):
     connection.close()
 
     print("Jobs saved to database.")
-    
+
 def check_database():
 
     connection = sqlite3.connect("jobs.db")
 
     cursor = connection.cursor()
 
+    # Total jobs
     cursor.execute("SELECT COUNT(*) FROM jobs")
-
     count = cursor.fetchone()[0]
 
     print("Jobs in database:", count)
 
+    # Active jobs
     cursor.execute("""
-        SELECT title, company, location, department
+        SELECT COUNT(*)
         FROM jobs
-        LIMIT 5
+        WHERE active = 1
     """)
 
-    rows = cursor.fetchall()
+    active_count = cursor.fetchone()[0]
 
-    print("\nFirst 5 jobs:")
+    print("Active jobs:", active_count)
 
-    for row in rows:
-        print(row)
+    # Inactive jobs
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM jobs
+        WHERE active = 0
+    """)
+
+    inactive_count = cursor.fetchone()[0]
+
+    print("Inactive jobs:", inactive_count)
 
     connection.close()
-
 
 url = "https://boards.greenhouse.io/discord"
 
