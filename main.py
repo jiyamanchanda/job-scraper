@@ -104,14 +104,14 @@ def save_jobs(jobs_data):
             company TEXT,
             location TEXT,
             department TEXT,
-            job_url TEXT
+            job_url TEXT UNIQUE
         )
     """)
 
     for job in jobs_data:
 
         cursor.execute("""
-            INSERT INTO jobs (
+            INSERT OR IGNORE INTO jobs (
                 title,
                 company,
                 location,
@@ -132,6 +132,33 @@ def save_jobs(jobs_data):
     connection.close()
 
     print("Jobs saved to database.")
+    
+def check_database():
+
+    connection = sqlite3.connect("jobs.db")
+
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM jobs")
+
+    count = cursor.fetchone()[0]
+
+    print("Jobs in database:", count)
+
+    cursor.execute("""
+        SELECT title, company, location, department
+        FROM jobs
+        LIMIT 5
+    """)
+
+    rows = cursor.fetchall()
+
+    print("\nFirst 5 jobs:")
+
+    for row in rows:
+        print(row)
+
+    connection.close()
 
 
 url = "https://boards.greenhouse.io/discord"
@@ -143,3 +170,5 @@ if html:
     jobs_data = parse_jobs(html, "Discord")
 
     save_jobs(jobs_data)
+
+    check_database()
