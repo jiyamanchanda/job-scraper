@@ -233,6 +233,28 @@ def show_department_counts():
 
     connection.close()
 
+def show_location_counts():
+
+    connection = sqlite3.connect("jobs.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT location, COUNT(*)
+        FROM jobs
+        WHERE active = 1
+        GROUP BY location
+        ORDER BY COUNT(*) DESC
+    """)
+
+    rows = cursor.fetchall()
+
+    print("\nJobs by location:")
+
+    for row in rows:
+        print(row)
+
+    connection.close()
+
 url = "https://boards.greenhouse.io/discord"
 
 html = get_page(url)
@@ -246,3 +268,5 @@ if html:
     check_database()
 
     show_department_counts()
+
+    show_location_counts()
