@@ -1,16 +1,18 @@
 import requests
-import sqlite3
 from bs4 import BeautifulSoup
+import sqlite3
 from datetime import datetime
+
+
+URL = "https://boards.greenhouse.io/discord"
 
 
 def get_page(url):
     try:
         response = requests.get(url, timeout=10)
+        response.raise_for_status()
 
         print("Status:", response.status_code)
-
-        response.raise_for_status()
 
         return response.text
 
@@ -19,12 +21,10 @@ def get_page(url):
         return None
 
 
-def parse_jobs(html, company):
+def parse_jobs(html):
     soup = BeautifulSoup(html, "html.parser")
 
     jobs = soup.find_all("tr", class_="job-post")
-
-    print("Number of jobs:", len(jobs))
 
     jobs_data = []
 
@@ -32,40 +32,19 @@ def parse_jobs(html, company):
 
         # Job title
         title_element = job.find("p", class_="body--medium")
-
-        # Remove "New" badge
-        new_badge = (
-            title_element.find("span", class_="tag-container")
-            if title_element
-            else None
-        )
-
-        if new_badge:
-            new_badge.decompose()
-
-        title = (
-            title_element.get_text(" ", strip=True)
-            if title_element
-            else None
-        )
+        title = title_element.get_text(strip=True) if title_element else None
 
         # Location
         location_element = job.find("p", class_="body__secondary")
-
         location = (
-            location_element.get_text(" ", strip=True)
+            location_element.get_text(strip=True)
             if location_element
             else None
         )
 
         # Job URL
         link_element = job.find("a")
-
-        job_url = (
-            link_element["href"]
-            if link_element
-            else None
-        )
+        job_url = link_element["href"] if link_element else None
 
         # Department
         department_container = job.find_parent(
@@ -73,11 +52,22 @@ def parse_jobs(html, company):
             class_="job-posts--table--department"
         )
 
-        department = (
-            department_container.find("h3").get_text(" ", strip=True)
-            if department_container
-            else None
-        )
+        if department_container:
+            department_element = department_container.find("h3")
+            department = (
+                department_element.get_text(strip=True)
+                if department_element
+                else None
+            )
+        else:
+            department = None
+
+        # Company
+        company = "Discord"
+
+        # Remove "New" if it appears in the title
+        if title:
+            title = title.replace("New", "").strip()
 
         job_data = {
             "title": title,
@@ -91,230 +81,226 @@ def parse_jobs(html, company):
 
     return jobs_data
 
+
+def create_database(conn):
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            company TEXT,
+            location TEXT,
+            department TEXT,
+            job_url TEXT UNIQUE,
+            first_seen TEXT,
+            last_seen TEXT,
+            active INTEGER
+        )
+    """)
+
+    conn.commit()
+
+
 def get_role(title):
+    if not title:
+        return "Other"
 
     title_lower = title.lower()
 
     if "software engineer" in title_lower:
-        return "Software Engineering"
-
-    elif "full-stack software engineer" in title_lower:
-        return "Software Engineering"
-
-    elif "devops" in title_lower or "qa/" in title_lower:
-        return "Software Engineering"
+        return "Software Engineer"
 
     elif "data scientist" in title_lower:
-        return "Data Science"
+        return "Data Scientist"
 
     elif "data engineer" in title_lower:
-        return "Data Engineering"
+        return "Data Engineer"
+
+    elif "machine learning" in title_lower:
+        return "Machine Learning"
 
     elif "product manager" in title_lower:
-        return "Product Management"
+        return "Product Manager"
 
     elif "designer" in title_lower:
-        return "Design"
+        return "Designer"
 
     elif "security" in title_lower:
         return "Security"
 
-    elif "finance" in title_lower:
-        return "Finance"
-
-    elif "counsel" in title_lower or "legal" in title_lower:
-        return "Legal"
-
-    elif "account manager" in title_lower:
-        return "Sales"
-
-    elif "sales" in title_lower:
-        return "Sales"
-
-    elif "oracle" in title_lower or "erp" in title_lower:
-        return "Business Systems"
-
-    elif "policy" in title_lower:
-        return "Policy"
-
-    elif "threat investigator" in title_lower:
-        return "Trust & Safety"
-
-    elif "engineering manager" in title_lower:
-        return "Engineering Management"
-
-    elif "director of engineering" in title_lower:
-        return "Engineering Management"
+    elif "devops" in title_lower:
+        return "DevOps"
 
     elif "manager" in title_lower:
-        return "Management"
+        return "Manager"
 
     else:
         return "Other"
 
-def find_new_jobs(jobs_data):
 
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
+def save_jobs(conn, jobs):
 
-    # Get all job URLs already in the database
+    cursor = conn.cursor()
+
+    now = datetime.now().isoformat()
+
+    # Mark existing jobs as inactive.
+    # This is only called after the scrape has passed validation.
     cursor.execute("""
-        SELECT job_url
-        FROM jobs
+        UPDATE jobs
+        SET active = 0
     """)
 
-    existing_urls = set(row[0] for row in cursor.fetchall())
+    for job in jobs:
 
-    connection.close()
+        cursor.execute("""
+            SELECT id
+            FROM jobs
+            WHERE job_url = ?
+        """, (job["job_url"],))
 
-    # Find jobs whose URL was not already in the database
-    new_jobs = []
+        existing_job = cursor.fetchone()
 
-    for job in jobs_data:
-        if job["job_url"] not in existing_urls:
-            new_jobs.append(job)
+        if existing_job:
+
+            cursor.execute("""
+                UPDATE jobs
+                SET title = ?,
+                    company = ?,
+                    location = ?,
+                    department = ?,
+                    last_seen = ?,
+                    active = 1
+                WHERE job_url = ?
+            """, (
+                job["title"],
+                job["company"],
+                job["location"],
+                job["department"],
+                now,
+                job["job_url"]
+            ))
+
+        else:
+
+            cursor.execute("""
+                INSERT INTO jobs (
+                    title,
+                    company,
+                    location,
+                    department,
+                    job_url,
+                    first_seen,
+                    last_seen,
+                    active
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                job["title"],
+                job["company"],
+                job["location"],
+                job["department"],
+                job["job_url"],
+                now,
+                now,
+                1
+            ))
+
+    conn.commit()
+
+
+def find_new_jobs(conn):
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT title, company, location, department, job_url
+        FROM jobs
+        WHERE first_seen = last_seen
+        AND active = 1
+    """)
+
+    new_jobs = cursor.fetchall()
 
     if new_jobs:
         print("\nNew jobs found:")
 
         for job in new_jobs:
             print(
-                job["title"],
+                job[0],
                 "|",
-                job["department"],
+                job[3],
                 "|",
-                job["location"]
+                job[2]
             )
 
-def save_jobs(jobs_data):
+    return new_jobs
 
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
 
-    # Create table
+def find_removed_jobs(conn):
+
+    cursor = conn.cursor()
+
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS jobs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        company TEXT,
-        location TEXT,
-        department TEXT,
-        job_url TEXT UNIQUE,
-        active INTEGER,
-        first_seen TEXT,
-        last_seen TEXT,
-        role TEXT
-    )
-""")
-
-    # Current time
-    current_time = datetime.now().isoformat()
-
-    # Assume every existing job is inactive
-    cursor.execute("""
-        UPDATE jobs
-        SET active = 0
-    """)
-
-    # Process current jobs
-    for job in jobs_data:
-
-        role = get_role(job["title"])
-
-        cursor.execute("""
-    INSERT INTO jobs (
-        title,
-        company,
-        location,
-        department,
-        job_url,
-        active,
-        first_seen,
-        last_seen,
-        role
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-
-    ON CONFLICT(job_url)
-    DO UPDATE SET
-        title = excluded.title,
-        company = excluded.company,
-        location = excluded.location,
-        department = excluded.department,
-        active = 1,
-        last_seen = excluded.last_seen,
-        role = excluded.role
-""", (
-    job["title"],
-    job["company"],
-    job["location"],
-    job["department"],
-    job["job_url"],
-    1,
-    current_time,
-    current_time,
-    role
-))
-
-    connection.commit()
-
-    connection.close()
-
-    print("Jobs saved to database.")
-
-def check_database():
-
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
-
-    # Total jobs
-    cursor.execute("SELECT COUNT(*) FROM jobs")
-    count = cursor.fetchone()[0]
-
-    print("Jobs in database:", count)
-
-    # Active jobs
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM jobs
-        WHERE active = 1
-    """)
-
-    active_count = cursor.fetchone()[0]
-
-    print("Active jobs:", active_count)
-
-    # Inactive jobs
-    cursor.execute("""
-        SELECT COUNT(*)
+        SELECT title, company, location, department, job_url
         FROM jobs
         WHERE active = 0
     """)
 
-    inactive_count = cursor.fetchone()[0]
+    removed_jobs = cursor.fetchall()
 
-    print("Inactive jobs:", inactive_count)
+    if removed_jobs:
+        print("\nRemoved jobs:")
 
-    # Show first 5 jobs with timestamps
+        for job in removed_jobs:
+            print(
+                job[0],
+                "|",
+                job[3],
+                "|",
+                job[2]
+            )
+
+    return removed_jobs
+
+
+def show_role_counts(conn):
+
+    cursor = conn.cursor()
+
     cursor.execute("""
-        SELECT title, first_seen, last_seen, active
+        SELECT title
         FROM jobs
-        LIMIT 5
+        WHERE active = 1
     """)
 
-    rows = cursor.fetchall()
+    jobs = cursor.fetchall()
 
-    print("\nFirst 5 jobs:")
+    role_counts = {}
 
-    for row in rows:
-        print(row)
+    for job in jobs:
 
-    connection.close()
+        role = get_role(job[0])
 
-def show_department_counts():
+        if role in role_counts:
+            role_counts[role] += 1
+        else:
+            role_counts[role] = 1
 
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
+    print("\nActive jobs by role:")
+
+    for role, count in sorted(
+        role_counts.items(),
+        key=lambda x: x[1],
+        reverse=True
+    ):
+        print(role, ":", count)
+
+
+def show_department_counts(conn):
+
+    cursor = conn.cursor()
 
     cursor.execute("""
         SELECT department, COUNT(*)
@@ -324,151 +310,78 @@ def show_department_counts():
         ORDER BY COUNT(*) DESC
     """)
 
-    rows = cursor.fetchall()
+    results = cursor.fetchall()
 
-    print("\nJobs by department:")
+    print("\nActive jobs by department:")
 
-    for row in rows:
-        print(row)
-
-    connection.close()
-
-def show_location_counts():
-
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT location, COUNT(*)
-        FROM jobs
-        WHERE active = 1
-        GROUP BY location
-        ORDER BY COUNT(*) DESC
-    """)
-
-    rows = cursor.fetchall()
-
-    print("\nJobs by location:")
-
-    for row in rows:
-        print(row)
-
-    connection.close()
-
-url = "https://boards.greenhouse.io/discord"
-
-html = get_page(url)
-
-def show_title_counts():
-
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT title, COUNT(*)
-        FROM jobs
-        WHERE active = 1
-        GROUP BY title
-        ORDER BY COUNT(*) DESC
-    """)
-
-    rows = cursor.fetchall()
-
-    print("\nJobs by title:")
-
-    for row in rows:
-        print(row)
-
-    connection.close()
-
-def show_role_counts():
-
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT role, COUNT(*)
-        FROM jobs
-        WHERE active = 1
-        GROUP BY role
-        ORDER BY COUNT(*) DESC
-    """)
-
-    rows = cursor.fetchall()
-
-    print("\nJobs by role:")
-
-    for row in rows:
-        print(row)
-
-    connection.close()
-
-def show_other_jobs():
-
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT title, department
-        FROM jobs
-        WHERE active = 1
-        AND role = 'Other'
-    """)
-
-    rows = cursor.fetchall()
-
-    if rows:
-        print("\nJobs classified as Other:")
-
-        for row in rows:
-            print(row)
-
-    connection.close()
-
-def show_new_jobs():
-
-    connection = sqlite3.connect("jobs.db")
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT title, company, location, role
-        FROM jobs
-        WHERE first_seen = last_seen
-        AND active = 1
-    """)
-
-    rows = cursor.fetchall()
-
-    if rows:
-        print("\nNew jobs:")
-
-        for row in rows:
-            print(row)
-
-    connection.close()
+    for department, count in results:
+        print(department, ":", count)
 
 
+def main():
 
-if html:
+    # -------------------------
+    # 1. Get page
+    # -------------------------
 
-    jobs_data = parse_jobs(html, "Discord")
+    html = get_page(URL)
 
-    
+    if html is None:
+        print("Scrape failed. Database was not updated.")
+        return
 
-    find_new_jobs(jobs_data)
+    # -------------------------
+    # 2. Parse jobs
+    # -------------------------
 
-    save_jobs(jobs_data)
+    jobs = parse_jobs(html)
 
-    check_database()
+    print("Jobs scraped:", len(jobs))
 
-    show_department_counts()
+    # -------------------------
+    # 3. Validate scrape
+    # -------------------------
 
-    show_location_counts()
+    if len(jobs) < 10:
+        print(
+            f"WARNING: Only {len(jobs)} jobs were scraped. "
+            "This may indicate a partial scrape. "
+            "Database was not updated."
+        )
+        return
 
-    show_title_counts()
+    # -------------------------
+    # 4. Database
+    # -------------------------
 
-    show_role_counts()
+    conn = sqlite3.connect("jobs.db")
 
-    show_other_jobs()
+    create_database(conn)
 
-    show_new_jobs()
+    # -------------------------
+    # 5. Save jobs
+    # -------------------------
+
+    save_jobs(conn, jobs)
+
+    # -------------------------
+    # 6. Detect changes
+    # -------------------------
+
+    find_new_jobs(conn)
+
+    find_removed_jobs(conn)
+
+    # -------------------------
+    # 7. Analytics
+    # -------------------------
+
+    show_role_counts(conn)
+
+    show_department_counts(conn)
+
+    conn.close()
+
+
+if __name__ == "__main__":
+    main()
