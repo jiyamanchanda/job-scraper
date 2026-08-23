@@ -1,6 +1,7 @@
 import requests
 import sqlite3
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 
 def get_page(url):
@@ -105,20 +106,22 @@ def save_jobs(jobs_data):
             location TEXT,
             department TEXT,
             job_url TEXT UNIQUE,
-            active INTEGER
+            active INTEGER,
+            first_seen TEXT,
+            last_seen TEXT
         )
     """)
 
-    # Step 1:
-    # Assume every existing job is no longer active
+    # Current time
+    current_time = datetime.now().isoformat()
+
+    # Assume every existing job is inactive
     cursor.execute("""
         UPDATE jobs
         SET active = 0
     """)
-    
 
-    # Step 2:
-    # Jobs found in the current scrape are active
+    # Process current jobs
     for job in jobs_data:
 
         cursor.execute("""
@@ -128,23 +131,29 @@ def save_jobs(jobs_data):
                 location,
                 department,
                 job_url,
-                active
+                active,
+                first_seen,
+                last_seen
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+
             ON CONFLICT(job_url)
             DO UPDATE SET
                 title = excluded.title,
                 company = excluded.company,
                 location = excluded.location,
                 department = excluded.department,
-                active = 1
+                active = 1,
+                last_seen = excluded.last_seen
         """, (
             job["title"],
             job["company"],
             job["location"],
             job["department"],
             job["job_url"],
-            1
+            1,
+            current_time,
+            current_time
         ))
 
     connection.commit()
@@ -156,7 +165,6 @@ def save_jobs(jobs_data):
 def check_database():
 
     connection = sqlite3.connect("jobs.db")
-
     cursor = connection.cursor()
 
     # Total jobs
@@ -187,6 +195,42 @@ def check_database():
 
     print("Inactive jobs:", inactive_count)
 
+    # Show first 5 jobs with timestamps
+    cursor.execute("""
+        SELECT title, first_seen, last_seen, active
+        FROM jobs
+        LIMIT 5
+    """)
+
+    rows = cursor.fetchall()
+
+    print("\nFirst 5 jobs:")
+
+    for row in rows:
+        print(row)
+
+    connection.close()
+
+def show_department_counts():
+
+    connection = sqlite3.connect("jobs.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT department, COUNT(*)
+        FROM jobs
+        WHERE active = 1
+        GROUP BY department
+        ORDER BY COUNT(*) DESC
+    """)
+
+    rows = cursor.fetchall()
+
+    print("\nJobs by department:")
+
+    for row in rows:
+        print(row)
+
     connection.close()
 
 url = "https://boards.greenhouse.io/discord"
@@ -200,3 +244,5 @@ if html:
     save_jobs(jobs_data)
 
     check_database()
+
+    show_department_counts()
