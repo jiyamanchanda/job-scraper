@@ -91,6 +91,43 @@ def parse_jobs(html, company):
 
     return jobs_data
 
+def get_role(title):
+
+    title_lower = title.lower()
+
+    if "software engineer" in title_lower:
+        return "Software Engineering"
+
+    elif "data scientist" in title_lower:
+        return "Data Science"
+
+    elif "data engineer" in title_lower:
+        return "Data Engineering"
+
+    elif "product manager" in title_lower:
+        return "Product Management"
+
+    elif "designer" in title_lower:
+        return "Design"
+
+    elif "security" in title_lower:
+        return "Security"
+
+    elif "finance" in title_lower:
+        return "Finance"
+
+    elif "counsel" in title_lower or "legal" in title_lower:
+        return "Legal"
+
+    elif "sales" in title_lower:
+        return "Sales"
+
+    elif "manager" in title_lower:
+        return "Management"
+
+    else:
+        return "Other"
+
 
 def save_jobs(jobs_data):
 
@@ -99,18 +136,19 @@ def save_jobs(jobs_data):
 
     # Create table
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            company TEXT,
-            location TEXT,
-            department TEXT,
-            job_url TEXT UNIQUE,
-            active INTEGER,
-            first_seen TEXT,
-            last_seen TEXT
-        )
-    """)
+    CREATE TABLE IF NOT EXISTS jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        company TEXT,
+        location TEXT,
+        department TEXT,
+        job_url TEXT UNIQUE,
+        active INTEGER,
+        first_seen TEXT,
+        last_seen TEXT,
+        role TEXT
+    )
+""")
 
     # Current time
     current_time = datetime.now().isoformat()
@@ -124,37 +162,42 @@ def save_jobs(jobs_data):
     # Process current jobs
     for job in jobs_data:
 
-        cursor.execute("""
-            INSERT INTO jobs (
-                title,
-                company,
-                location,
-                department,
-                job_url,
-                active,
-                first_seen,
-                last_seen
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        role = get_role(job["title"])
 
-            ON CONFLICT(job_url)
-            DO UPDATE SET
-                title = excluded.title,
-                company = excluded.company,
-                location = excluded.location,
-                department = excluded.department,
-                active = 1,
-                last_seen = excluded.last_seen
-        """, (
-            job["title"],
-            job["company"],
-            job["location"],
-            job["department"],
-            job["job_url"],
-            1,
-            current_time,
-            current_time
-        ))
+        cursor.execute("""
+    INSERT INTO jobs (
+        title,
+        company,
+        location,
+        department,
+        job_url,
+        active,
+        first_seen,
+        last_seen,
+        role
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+    ON CONFLICT(job_url)
+    DO UPDATE SET
+        title = excluded.title,
+        company = excluded.company,
+        location = excluded.location,
+        department = excluded.department,
+        active = 1,
+        last_seen = excluded.last_seen,
+        role = excluded.role
+""", (
+    job["title"],
+    job["company"],
+    job["location"],
+    job["department"],
+    job["job_url"],
+    1,
+    current_time,
+    current_time,
+    role
+))
 
     connection.commit()
 
@@ -259,6 +302,50 @@ url = "https://boards.greenhouse.io/discord"
 
 html = get_page(url)
 
+def show_title_counts():
+
+    connection = sqlite3.connect("jobs.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT title, COUNT(*)
+        FROM jobs
+        WHERE active = 1
+        GROUP BY title
+        ORDER BY COUNT(*) DESC
+    """)
+
+    rows = cursor.fetchall()
+
+    print("\nJobs by title:")
+
+    for row in rows:
+        print(row)
+
+    connection.close()
+
+def show_role_counts():
+
+    connection = sqlite3.connect("jobs.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT role, COUNT(*)
+        FROM jobs
+        WHERE active = 1
+        GROUP BY role
+        ORDER BY COUNT(*) DESC
+    """)
+
+    rows = cursor.fetchall()
+
+    print("\nJobs by role:")
+
+    for row in rows:
+        print(row)
+
+    connection.close()
+
 if html:
 
     jobs_data = parse_jobs(html, "Discord")
@@ -270,3 +357,7 @@ if html:
     show_department_counts()
 
     show_location_counts()
+
+    show_title_counts()
+
+    show_role_counts()
