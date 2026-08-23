@@ -1,4 +1,5 @@
 import requests
+import sqlite3
 from bs4 import BeautifulSoup
 
 
@@ -77,7 +78,6 @@ def parse_jobs(html, company):
             else None
         )
 
-        # Store job information
         job_data = {
             "title": title,
             "company": company,
@@ -91,12 +91,55 @@ def parse_jobs(html, company):
     return jobs_data
 
 
+def save_jobs(jobs_data):
+
+    connection = sqlite3.connect("jobs.db")
+
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            company TEXT,
+            location TEXT,
+            department TEXT,
+            job_url TEXT
+        )
+    """)
+
+    for job in jobs_data:
+
+        cursor.execute("""
+            INSERT INTO jobs (
+                title,
+                company,
+                location,
+                department,
+                job_url
+            )
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            job["title"],
+            job["company"],
+            job["location"],
+            job["department"],
+            job["job_url"]
+        ))
+
+    connection.commit()
+
+    connection.close()
+
+    print("Jobs saved to database.")
+
+
 url = "https://boards.greenhouse.io/discord"
 
 html = get_page(url)
 
 if html:
+
     jobs_data = parse_jobs(html, "Discord")
 
-    print("\nJobs data:")
-    print(jobs_data)
+    save_jobs(jobs_data)
