@@ -1,12 +1,11 @@
 import sqlite3
 import pandas as pd
-
+from job_utils import get_role
 
 DB_NAME = "jobs.db"
 
 
 def load_jobs():
-
     conn = sqlite3.connect(DB_NAME)
 
     query = """
@@ -29,7 +28,31 @@ def load_jobs():
     return df
 
 
+def classify_location(location):
+
+    if pd.isna(location):
+        return "Unknown"
+
+    location = location.lower()
+
+    if "remote" in location:
+        return "Remote"
+
+    if " or " in location or "," in location:
+        return "Multiple locations"
+
+    return "On-site"
+
+# --------------------------------
+# Load data
+# --------------------------------
+
 df = load_jobs()
+
+
+# --------------------------------
+# Basic dataset information
+# --------------------------------
 
 print("Dataset shape:")
 print(df.shape)
@@ -37,11 +60,43 @@ print(df.shape)
 print("\nColumns:")
 print(df.columns.tolist())
 
-active_jobs = df[df["active"] == 1]
+
+# --------------------------------
+# Active jobs
+# --------------------------------
+
+active_jobs = df[df["active"] == 1].copy()
 
 print("\nActive jobs:")
 print(len(active_jobs))
 
+
+# --------------------------------
+# Role classification
+# --------------------------------
+
+active_jobs["role"] = (
+    active_jobs["title"]
+    .apply(get_role)
+)
+
+
+print("\nJobs by role:")
+
+role_counts = (
+    active_jobs["role"]
+    .value_counts()
+)
+
+print(role_counts)
+
+print("\nActive jobs:")
+print(len(active_jobs))
+
+
+# --------------------------------
+# Jobs by department
+# --------------------------------
 
 print("\nJobs by department:")
 
@@ -53,6 +108,10 @@ department_counts = (
 print(department_counts)
 
 
+# --------------------------------
+# Jobs by original location
+# --------------------------------
+
 print("\nJobs by location:")
 
 location_counts = (
@@ -60,20 +119,43 @@ location_counts = (
     .value_counts()
 )
 
-print(location_counts.head(10))
+print(location_counts)
 
 
-remote_jobs = active_jobs[
+# --------------------------------
+# Classify location
+# --------------------------------
+
+active_jobs["location_type"] = (
     active_jobs["location"]
-    .str.contains("remote", case=False, na=False)
-]
-
-print("\nRemote jobs:", len(remote_jobs))
-
-remote_percentage = (
-    len(remote_jobs) / len(active_jobs) * 100
+    .apply(classify_location)
 )
 
+
+# --------------------------------
+# Jobs by location type
+# --------------------------------
+
+print("\nJobs by location type:")
+
+location_type_counts = (
+    active_jobs["location_type"]
+    .value_counts()
+)
+
+print(location_type_counts)
+
+
+# --------------------------------
+# Location classification details
+# --------------------------------
+
+print("\nLocation classification:")
+
 print(
-    f"Remote percentage: {remote_percentage:.2f}%"
+    active_jobs[
+        ["location", "location_type"]
+    ]
+    .drop_duplicates()
+    .to_string(index=False)
 )
