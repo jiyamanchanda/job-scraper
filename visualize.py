@@ -4,6 +4,13 @@ import matplotlib.pyplot as plt
 
 from job_utils import get_role
 
+from analytics_utils import (
+    get_role_counts,
+    get_department_counts,
+    get_location_type_counts,
+    get_remote_by_role
+)
+
 
 DB_NAME = "jobs.db"
 
@@ -69,8 +76,7 @@ def prepare_data(df):
 def plot_jobs_by_role(active_jobs):
 
     role_counts = (
-        active_jobs["role"]
-        .value_counts()
+        get_role_counts(active_jobs)
         .sort_values()
     )
 
@@ -90,8 +96,7 @@ def plot_jobs_by_role(active_jobs):
 def plot_jobs_by_department(active_jobs):
 
     department_counts = (
-        active_jobs["department"]
-        .value_counts()
+        get_department_counts(active_jobs)
         .sort_values()
     )
 
@@ -105,16 +110,13 @@ def plot_jobs_by_department(active_jobs):
 
     plt.tight_layout()
 
-    
-
     plt.savefig("charts/jobs_by_department.png")
     plt.close()
 
 def plot_jobs_by_location_type(active_jobs):
 
     location_type_counts = (
-        active_jobs["location_type"]
-        .value_counts()
+        get_location_type_counts(active_jobs)
         .sort_values()
     )
 
@@ -131,6 +133,27 @@ def plot_jobs_by_location_type(active_jobs):
     plt.savefig("charts/jobs_by_location_type.png")
     plt.close()
 
+def plot_remote_percentage_by_role(active_jobs):
+
+    role_summary = get_remote_by_role(active_jobs)
+
+    remote_percentages = (
+        role_summary["remote_percentage"]
+        .sort_values()
+    )
+
+    plt.figure(figsize=(10, 6))
+
+    remote_percentages.plot(kind="barh")
+
+    plt.title("Remote Jobs by Role")
+    plt.xlabel("Remote Jobs (%)")
+    plt.ylabel("Role")
+
+    plt.tight_layout()
+
+    plt.savefig("charts/remote_percentage_by_role.png")
+    plt.close()
 
 def main():
 
@@ -143,6 +166,8 @@ def main():
     plot_jobs_by_department(active_jobs)
 
     plot_jobs_by_location_type(active_jobs)
+
+    plot_remote_percentage_by_role(active_jobs)
 
 
 if __name__ == "__main__":

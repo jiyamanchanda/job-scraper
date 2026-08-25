@@ -4,6 +4,7 @@ import pandas as pd
 from job_utils import get_role
 
 
+
 DB_NAME = "jobs.db"
 
 
@@ -164,6 +165,27 @@ def generate_summary(active_jobs):
         "top_locations": top_locations
     }
 
+def analyze_remote_by_role(active_jobs):
+
+    role_summary = (
+        active_jobs
+        .groupby("role")
+        .agg(
+            total_jobs=("role", "size"),
+            remote_jobs=("location_type", lambda x: (x == "Remote").sum())
+        )
+    )
+
+    role_summary["remote_percentage"] = (
+        role_summary["remote_jobs"]
+        / role_summary["total_jobs"]
+        * 100
+    )
+
+    return role_summary.sort_values(
+        "remote_percentage",
+        ascending=False
+    )
 
 def main():
 
@@ -244,6 +266,13 @@ def main():
 
     print(location_counts)
 
+    print("\nRemote jobs by role:")
+
+    remote_by_role = analyze_remote_by_role(active_jobs)
+
+    print(
+    remote_by_role.round(2)
+)
 
     # -----------------------------
     # Location type analysis
