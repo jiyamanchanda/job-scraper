@@ -36,12 +36,15 @@ def classify_location(location):
     if pd.isna(location):
         return "Unknown"
 
-    location = location.lower()
+    location = location.strip().lower()
 
     if "remote" in location:
         return "Remote"
 
-    if " or " in location or "," in location:
+    if " or " in location:
+        return "Multiple locations"
+
+    if location.count(",") >= 2:
         return "Multiple locations"
 
     return "On-site"
