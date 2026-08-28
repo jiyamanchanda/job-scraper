@@ -8,7 +8,8 @@ from analytics_utils import (
     get_role_counts,
     get_department_counts,
     get_location_type_counts,
-    get_remote_by_role
+    get_remote_by_role,
+    get_department_by_location_type
 )
 
 
@@ -155,6 +156,31 @@ def plot_remote_percentage_by_role(active_jobs):
     plt.savefig("charts/remote_percentage_by_role.png")
     plt.close()
 
+def plot_department_by_location_type(active_jobs):
+
+    department_location = get_department_by_location_type(
+        active_jobs
+    )
+
+    ax = department_location.plot(
+        kind="bar",
+        figsize=(12, 7)
+    )
+
+    ax.set_title("Jobs by Department and Location Type")
+    ax.set_xlabel("Department")
+    ax.set_ylabel("Number of Jobs")
+
+    plt.xticks(rotation=45, ha="right")
+
+    plt.tight_layout()
+
+    plt.savefig(
+        "charts/department_by_location_type.png"
+    )
+
+    plt.close()
+
 def main():
 
     df = load_jobs()
@@ -168,6 +194,8 @@ def main():
     plot_jobs_by_location_type(active_jobs)
 
     plot_remote_percentage_by_role(active_jobs)
+
+    plot_department_by_location_type(active_jobs)
 
 
 if __name__ == "__main__":

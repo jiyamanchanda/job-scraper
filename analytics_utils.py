@@ -74,3 +74,10 @@ def get_department_percentages(active_jobs):
         / len(active_jobs)
         * 100
     )
+
+def get_department_by_location_type(active_jobs):
+
+    return pd.crosstab(
+        active_jobs["department"],
+        active_jobs["location_type"]
+    )

@@ -1,8 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
-import sqlite3
 from datetime import datetime
 from job_utils import get_role
+from db import get_connection
 
 
 URL = "https://boards.greenhouse.io/discord"
@@ -83,45 +83,23 @@ def parse_jobs(html):
     return jobs_data
 
 
-def create_database(conn):
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            company TEXT,
-            location TEXT,
-            department TEXT,
-            job_url TEXT UNIQUE,
-            first_seen TEXT,
-            last_seen TEXT,
-            active INTEGER
-        )
-    """)
-
-    conn.commit()
-
-
-
-    
-
 def get_active_job_urls(conn):
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT job_url
         FROM jobs
-        WHERE active = 1
+        WHERE active = TRUE
     """)
 
     return {row[0] for row in cursor.fetchall()}
+
 
 def save_jobs(conn, jobs, previous_active_urls):
 
     cursor = conn.cursor()
 
-    now = datetime.now().isoformat()
+    now = datetime.now()
 
     current_job_urls = {
         job["job_url"]
@@ -131,9 +109,10 @@ def save_jobs(conn, jobs, previous_active_urls):
 
     removed_urls = previous_active_urls - current_job_urls
 
+    # Mark all existing jobs as inactive first
     cursor.execute("""
         UPDATE jobs
-        SET active = 0
+        SET active = FALSE
     """)
 
     for job in jobs:
@@ -141,7 +120,7 @@ def save_jobs(conn, jobs, previous_active_urls):
         cursor.execute("""
             SELECT id
             FROM jobs
-            WHERE job_url = ?
+            WHERE job_url = %s
         """, (job["job_url"],))
 
         existing_job = cursor.fetchone()
@@ -150,13 +129,13 @@ def save_jobs(conn, jobs, previous_active_urls):
 
             cursor.execute("""
                 UPDATE jobs
-                SET title = ?,
-                    company = ?,
-                    location = ?,
-                    department = ?,
-                    last_seen = ?,
-                    active = 1
-                WHERE job_url = ?
+                SET title = %s,
+                    company = %s,
+                    location = %s,
+                    department = %s,
+                    last_seen = %s,
+                    active = TRUE
+                WHERE job_url = %s
             """, (
                 job["title"],
                 job["company"],
@@ -179,7 +158,7 @@ def save_jobs(conn, jobs, previous_active_urls):
                     last_seen,
                     active
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 job["title"],
                 job["company"],
@@ -188,12 +167,13 @@ def save_jobs(conn, jobs, previous_active_urls):
                 job["job_url"],
                 now,
                 now,
-                1
+                True
             ))
 
     conn.commit()
 
     return removed_urls
+
 
 def find_new_jobs(conn):
 
@@ -203,7 +183,7 @@ def find_new_jobs(conn):
         SELECT title, company, location, department, job_url
         FROM jobs
         WHERE first_seen = last_seen
-        AND active = 1
+        AND active = TRUE
     """)
 
     new_jobs = cursor.fetchall()
@@ -237,7 +217,7 @@ def find_removed_jobs(conn, removed_urls):
         cursor.execute("""
             SELECT title, company, location, department
             FROM jobs
-            WHERE job_url = ?
+            WHERE job_url = %s
         """, (job_url,))
 
         job = cursor.fetchone()
@@ -251,6 +231,7 @@ def find_removed_jobs(conn, removed_urls):
                 job[2]
             )
 
+
 def show_role_counts(conn):
 
     cursor = conn.cursor()
@@ -258,7 +239,7 @@ def show_role_counts(conn):
     cursor.execute("""
         SELECT title
         FROM jobs
-        WHERE active = 1
+        WHERE active = TRUE
     """)
 
     jobs = cursor.fetchall()
@@ -291,7 +272,7 @@ def show_department_counts(conn):
     cursor.execute("""
         SELECT department, COUNT(*)
         FROM jobs
-        WHERE active = 1
+        WHERE active = TRUE
         GROUP BY department
         ORDER BY COUNT(*) DESC
     """)
@@ -340,20 +321,15 @@ def main():
     # 4. Database
     # -------------------------
 
-    conn = sqlite3.connect("jobs.db")
-
-    create_database(conn)
-
-    
-    
+    conn = get_connection()
 
     previous_active_urls = get_active_job_urls(conn)
 
     removed_urls = save_jobs(
-    conn,
-    jobs,
-    previous_active_urls
-)
+        conn,
+        jobs,
+        previous_active_urls
+    )
 
     find_new_jobs(conn)
 
@@ -366,7 +342,6 @@ def main():
     show_role_counts(conn)
 
     show_department_counts(conn)
-
 
     conn.close()
 
