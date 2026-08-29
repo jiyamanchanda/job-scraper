@@ -1,5 +1,6 @@
-import sqlite3
 import pandas as pd
+
+from db import get_connection
 
 from job_utils import get_role
 
@@ -15,12 +16,12 @@ from analytics_utils import (
 )
 
 
-DB_NAME = "jobs.db"
+
 
 
 def load_jobs():
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_connection()
 
     query = """
         SELECT
