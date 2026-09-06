@@ -133,6 +133,7 @@ def save_jobs(conn, jobs, previous_active_urls):
                     company = %s,
                     location = %s,
                     department = %s,
+                    role = %s,
                     last_seen = %s,
                     active = TRUE
                 WHERE job_url = %s
@@ -141,6 +142,7 @@ def save_jobs(conn, jobs, previous_active_urls):
                 job["company"],
                 job["location"],
                 job["department"],
+                get_role(job["title"]),
                 now,
                 job["job_url"]
             ))
@@ -153,17 +155,19 @@ def save_jobs(conn, jobs, previous_active_urls):
                     company,
                     location,
                     department,
+                    role,
                     job_url,
                     first_seen,
                     last_seen,
                     active
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 job["title"],
                 job["company"],
                 job["location"],
                 job["department"],
+                get_role(job["title"]),
                 job["job_url"],
                 now,
                 now,
