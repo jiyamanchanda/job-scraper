@@ -63,7 +63,8 @@ def get_jobs(
     location: str | None = Query(default=None),
     role: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0)
+    offset: int = Query(default=0, ge=0),
+    search: str | None = None,
 ):
 
     conn = get_connection()
@@ -105,6 +106,16 @@ def get_jobs(
             if role is not None:
                 conditions.append("LOWER(role) LIKE LOWER(%s)")
                 parameters.append(f"%{role}%")
+
+            if search is not None:
+                conditions.append("""
+                    (
+                        LOWER(title) LIKE LOWER(%s)
+                        OR LOWER(company) LIKE LOWER(%s)
+                    )
+                """)
+                search_value = f"%{search}%"
+                parameters.extend([search_value, search_value])
 
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
