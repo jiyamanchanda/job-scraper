@@ -25,4 +25,4 @@ try:
         print(f"Updated {len(rows)} jobs with roles.")
 
 finally:
-    conn.close()
+    conn.close();

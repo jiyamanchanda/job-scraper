@@ -1,86 +1,19 @@
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
+
+
 from job_utils import get_role
 from db import get_connection
+from job_schema import Job
+from scrapers.greenhouse import GreenhouseScraper
+from datetime import datetime
 
 
 URL = "https://boards.greenhouse.io/discord"
 
 
-def get_page(url):
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-
-        print("Status:", response.status_code)
-
-        return response.text
-
-    except requests.RequestException as e:
-        print("Request failed:", e)
-        return None
 
 
-def parse_jobs(html):
-    soup = BeautifulSoup(html, "html.parser")
 
-    jobs = soup.find_all("tr", class_="job-post")
 
-    jobs_data = []
-
-    for job in jobs:
-
-        # Job title
-        title_element = job.find("p", class_="body--medium")
-        title = title_element.get_text(strip=True) if title_element else None
-
-        # Location
-        location_element = job.find("p", class_="body__secondary")
-        location = (
-            location_element.get_text(strip=True)
-            if location_element
-            else None
-        )
-
-        # Job URL
-        link_element = job.find("a")
-        job_url = link_element["href"] if link_element else None
-
-        # Department
-        department_container = job.find_parent(
-            "div",
-            class_="job-posts--table--department"
-        )
-
-        if department_container:
-            department_element = department_container.find("h3")
-            department = (
-                department_element.get_text(strip=True)
-                if department_element
-                else None
-            )
-        else:
-            department = None
-
-        # Company
-        company = "Discord"
-
-        # Remove "New" if it appears in the title
-        if title:
-            title = title.replace("New", "").strip()
-
-        job_data = {
-            "title": title,
-            "company": company,
-            "location": location,
-            "department": department,
-            "job_url": job_url
-        }
-
-        jobs_data.append(job_data)
-
-    return jobs_data
 
 
 def get_active_job_urls(conn):
@@ -295,17 +228,16 @@ def main():
     # 1. Get page
     # -------------------------
 
-    html = get_page(URL)
+    scraper = GreenhouseScraper(
+    URL,
+    "Discord"
+)
 
-    if html is None:
+    jobs = scraper.scrape()
+
+    if jobs is None:
         print("Scrape failed. Database was not updated.")
         return
-
-    # -------------------------
-    # 2. Parse jobs
-    # -------------------------
-
-    jobs = parse_jobs(html)
 
     print("Jobs scraped:", len(jobs))
 
