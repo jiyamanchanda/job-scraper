@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-
+import time
 from job_schema import Job
 
 
@@ -12,21 +12,72 @@ class GreenhouseScraper:
         self.company = company
 
     def get_page(self):
-        try:
-            response = requests.get(
-                self.url,
-                timeout=10
+
+        headers = {
+            "User-Agent": (
+                "JobMarketIntelligencePlatform/1.0 "
+                "(job-market-data-collection)"
             )
+        }
 
-            response.raise_for_status()
+        max_attempts = 3
 
-            print("Status:", response.status_code)
+        for attempt in range(1, max_attempts + 1):
 
-            return response.text
+            try:
+                print(
+                    f"Request attempt "
+                    f"{attempt}/{max_attempts}"
+                )
 
-        except requests.RequestException as e:
-            print("Request failed:", e)
-            return None
+                response = requests.get(
+                    self.url,
+                    headers=headers,
+                    timeout=10
+                )
+
+                response.raise_for_status()
+
+                print("Status:", response.status_code)
+
+                return response.text
+
+            except requests.Timeout:
+                print("Request timed out.")
+
+            except requests.ConnectionError:
+                print(
+                    "Connection error. "
+                    "Could not reach the job source."
+                )
+
+            except requests.HTTPError as e:
+
+                print("HTTP error:", e)
+
+                # Retry only server-side errors.
+                if response.status_code < 500:
+                    return None
+
+            except requests.RequestException as e:
+                print("Request failed:", e)
+                return None
+
+            # Don't wait after the final attempt.
+            if attempt < max_attempts:
+
+                wait_time = 2 ** (attempt - 1)
+
+                print(
+                    f"Retrying in "
+                    f"{wait_time} second(s)..."
+                )
+
+                time.sleep(wait_time)
+
+        print("All request attempts failed.")
+
+        return None
 
     def parse_jobs(self, html):
         soup = BeautifulSoup(html, "html.parser")
